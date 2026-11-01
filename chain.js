@@ -12,16 +12,32 @@ function operator(proxies) {
     throw new Error(`未找到入口或美国出口：入口 ${entries.length} 个，出口 ${exits.length} 个。`);
   }
 
+  function shortName(p) {
+    const match = p.name.match(/AC(PS|SS|AS)-(HKBGP|HK|SG|USA|US)\s*\|/i);
+    const tier = { PS: '专业', SS: '标准', AS: '高级' }[match[1].toUpperCase()];
+    const region = { HKBGP: '香港多线', HK: '香港', SG: '新加坡', US: '美国', USA: '美国' }[match[2].toUpperCase()];
+    return `${region}${tier}${/家宽|住宅/.test(p.name) ? '家宽' : ''}`;
+  }
+  function uniqueNames(items, prefix) {
+    const counts = {};
+    return items.map(p => {
+      const base = `${prefix}${shortName(p)}`;
+      counts[base] = (counts[base] || 0) + 1;
+      return counts[base] === 1 ? base : `${base}-${counts[base]}`;
+    });
+  }
+  const entryNames = uniqueNames(entries, '入口-');
+  const exitNames = uniqueNames(exits, '');
   const entryNodes = entries.map((p, i) => ({
     ...p,
-    name: `入口-${String(i + 1).padStart(2, '0')}-${p.name}`,
+    name: entryNames[i],
   }));
   const chains = [];
   for (const entry of entryNodes) {
-    for (const exit of exits) {
+    for (const [i, exit] of exits.entries()) {
       chains.push({
         ...exit,
-        name: `双跳-${entry.name} → ${exit.name}`,
+        name: `双跳-${entry.name.slice(3)}→${exitNames[i]}`,
         'underlying-proxy': entry.name,
       });
     }
