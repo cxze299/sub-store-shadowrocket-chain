@@ -2,6 +2,11 @@
 function operator(proxies) {
   const entries = proxies.filter(p => /AC(?:PS|SS|AS)-(?:HK(?:BGP)?|SG)\s*\|/i.test(p.name));
   const exits = proxies.filter(p => /AC(?:PS|SS|AS)-USA?\s*\|/i.test(p.name));
+  entries.sort((a, b) => Number(/ACPS-HKBGP\s*\|/i.test(b.name)) - Number(/ACPS-HKBGP\s*\|/i.test(a.name)));
+  exits.sort((a, b) => {
+    const rank = p => /ACPS-US\s*\|/i.test(p.name) && !/家宽|住宅/.test(p.name) ? 0 : /ACPS-US\s*\|/i.test(p.name) ? 1 : 2;
+    return rank(a) - rank(b);
+  });
 
   const chainKeys = ['underlying-proxy', 'dialer-proxy', 'chain', 'detour', 'prev_hop'];
   if ([...entries, ...exits].some(p => chainKeys.some(key => p[key]))) {
@@ -42,5 +47,5 @@ function operator(proxies) {
       });
     }
   }
-  return [...entryNodes, ...chains];
+  return [...chains, ...entryNodes];
 }
