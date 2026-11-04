@@ -1,56 +1,76 @@
-// Sub-Store Script Operator: measured HK entry -> US exits.
-// Two direct benchmarks + three chained checks (2026-11-04); not a live health check.
+// Updated 2026-11-04 23:19 +08:00. AI-focused snapshot; static preference, client performs health checks.
+// OpenAI/Claude API 401 = authentication required, NOT proof of successful AI inference.
+// ChatGPT web probes encountered anti-bot challenges; confirm in your browser.
+// Sub-Store Script Operator: AI-focused, measured two-hop routes; no login or inference guarantee.
+// Generated route data is inserted by the local benchmark build step.
 function operator(proxies) {
-  const entryRules = [
-    [/\[测试-标准\]\s*ACSS-HK\s*\|/i, '港测试'],
-  ];
-  const exitRules = [
-    [/\[测试-标准\]\s*ACSS-USA?\s*\|/i, '美测试'],
-    [/\[测试\]\s*ACSS-USA?\s*\|/i, '美低倍'],
-    [/\[测试-高级\]\s*ACAS-US2\s*\|/i, '美高级'],
-    [/ACGO-US\s*\|/i, '美国际'],
-  ];
-  function select(rules) {
-    return rules.flatMap(([pattern, label]) => proxies
-      .filter(p => pattern.test(p.name || ''))
-      .map(p => ({ proxy: p, label })));
-  }
-  const entries = select(entryRules);
-  const exits = select(exitRules);
-
+  const routes = [
+  [
+    "[高级]|ACAS-HK||",
+    "[高级]|ACAS-SG||"
+  ],
+  [
+    "[标准]|ACSS-JP||",
+    "[高级]|ACAS-SG||"
+  ],
+  [
+    "[专业+]|ACPS-US|住宅|",
+    "[国际]|ACGO-US||"
+  ],
+  [
+    "[高级]|ACAS-HK||",
+    "[专业]|ACPS-KR||"
+  ],
+  [
+    "[标准]|ACSS-HK||",
+    "[专业]|ACPS-JP||"
+  ]
+];
+  const specs = {
+  "[高级]|ACAS-HK||": "港高",
+  "[高级]|ACAS-SG||": "新高",
+  "[标准]|ACSS-JP||": "日标",
+  "[专业+]|ACPS-US|住宅|": "美宅",
+  "[国际]|ACGO-US||": "美国际",
+  "[专业]|ACPS-KR||": "韩专",
+  "[标准]|ACSS-HK||": "港标",
+  "[专业]|ACPS-JP||": "日专"
+};
   const chainKeys = ['underlying-proxy', 'dialer-proxy', 'chain', 'detour', 'prev_hop'];
-  if (proxies.some(p => /^双跳-|^入口-/.test(p.name || '') || chainKeys.some(key => p[key]))) {
-    throw new Error('源节点已有前置代理，请使用原始订阅，勿重复处理双跳输出。');
+  if (!Array.isArray(proxies)) throw new Error('请提供原始订阅节点数组。');
+  if (proxies.some(p => /^双跳-|^入口-/.test(p.name || '') || chainKeys.some(k => p[k]))) {
+    throw new Error('请使用原始订阅，不要重复处理链式输出或带前置代理的节点。');
   }
-
-  if (!entries.length || !exits.length) {
-    throw new Error(`未找到测速优选入口或美国出口：入口 ${entries.length} 个，出口 ${exits.length} 个。请使用含国际/测试线路的原始订阅。`);
+  function nodeKey(name) {
+    const text = String(name || '').replace(/\s+/g, '');
+    const tier = (text.match(/^\[[^\]]+\]/) || [''])[0];
+    const code = (text.match(/AC[A-Z]+-[A-Z]+\d*/i) || [''])[0].toUpperCase();
+    return [tier, code, /家宽|住宅/.test(text) ? '住宅' : '', /三网直连/.test(text) ? '直连' : ''].join('|');
   }
-
-  function uniqueNames(items, prefix) {
-    const counts = {};
-    return items.map(p => {
-      const base = `${prefix}${p.label}`;
-      counts[base] = (counts[base] || 0) + 1;
-      return counts[base] === 1 ? base : `${base}-${counts[base]}`;
+  const available = new Map();
+  for (const p of proxies) {
+    const key = nodeKey(p.name);
+    if (!Object.prototype.hasOwnProperty.call(specs, key)) continue;
+    if (available.has(key)) throw new Error(`候选节点重复：${specs[key]}，请先对原始订阅去重。`);
+    available.set(key, p);
+  }
+  const entries = new Map();
+  const output = [];
+  for (const [index, route] of routes.entries()) {
+    const [entryKey, exitKey] = route;
+    const entry = available.get(entryKey);
+    const exit = available.get(exitKey);
+    if (!entry || !exit) continue;
+    if (entry.server === exit.server && entry.port === exit.port) continue;
+    if (!entries.has(entryKey)) entries.set(entryKey, {
+      ...entry, name: `入口-AI-${specs[entryKey]}`,
+    });
+    output.push({
+      ...exit,
+      name: `双跳-AI${String(index + 1).padStart(2, '0')}-${specs[entryKey]}→${specs[exitKey]}`,
+      'underlying-proxy': entries.get(entryKey).name,
     });
   }
-  const entryNames = uniqueNames(entries, '入口-');
-  const exitNames = uniqueNames(exits, '');
-  const entryNodes = entries.map((p, i) => ({
-    ...p.proxy,
-    name: entryNames[i],
-  }));
-  const chains = [];
-  // Prefer all routes to the best US exit before trying a weaker exit.
-  for (const [i, exit] of exits.entries()) {
-    for (const entry of entryNodes) {
-      chains.push({
-        ...exit.proxy,
-        name: `双跳-${entry.name.slice(3)}→${exitNames[i]}`,
-        'underlying-proxy': entry.name,
-      });
-    }
-  }
-  return [...chains, ...entryNodes];
+  if (!output.length) throw new Error('没有匹配到 AI 优选组合，请检查原始订阅是否包含国际、专业和测试线路。');
+  return [...output, ...entries.values()];
 }

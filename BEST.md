@@ -1,13 +1,13 @@
 # 全订阅链式优选：chain-best.js
 
-更新时间：2026-11-04 22:56 +08:00。根据用户提供的 Clash 订阅重新下载、检测和生成；原港美 `chain.js` 不变。
+更新时间：2026-11-04 22:56 +08:00。根据用户提供的 Clash 订阅重新下载、检测和生成；`chain.js` 已独立改为 AI 版，见 [AI.md](AI.md)。
 
 ## 使用
 
 Sub-Store 选择最新的原始订阅，将下列远程脚本作为最后一个处理操作。不要把旧链式输出作为输入，不要在此脚本后重命名或删除入口。
 
 ```text
-https://mouss.synology.me:1050/chain-best.js?v=20261104-r2
+https://mouss.synology.me:1050/chain-best.js
 ```
 
 Git 备份：`https://raw.githubusercontent.com/cxze299/sub-store-shadowrocket-chain/main/chain-best.js`。
