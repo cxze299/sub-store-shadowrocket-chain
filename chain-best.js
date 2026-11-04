@@ -56,6 +56,13 @@ function operator(proxies) {
     const code = (text.match(/AC[A-Z]+-[A-Z]+\d*/i) || [''])[0].toUpperCase();
     return [tier, code, /家宽|住宅/.test(text) ? '住宅' : '', /三网直连/.test(text) ? '直连' : ''].join('|');
   }
+  // Put the exit flag before any entry location while preserving group regexes.
+  function flag(key) {
+    const code = (key.match(/AC[A-Z]+-([A-Z]+)/) || [])[1];
+    return { HK: '🇭🇰', HKBGP: '🇭🇰', SG: '🇸🇬', KR: '🇰🇷',
+      JP: '🇯🇵', US: '🇺🇸', USA: '🇺🇸', TW: '🇹🇼', DE: '🇩🇪',
+      FR: '🇫🇷', UK: '🇬🇧', RU: '🇷🇺' }[code] || '🌐';
+  }
   const available = new Map();
   for (const p of proxies) {
     const key = nodeKey(p.name);
@@ -72,11 +79,11 @@ function operator(proxies) {
     if (!entry || !exit) continue;
     if (entry.server === exit.server && entry.port === exit.port) continue;
     if (!entries.has(entryKey)) entries.set(entryKey, {
-      ...entry, name: `入口-${specs[entryKey]}`,
+      ...entry, name: `入口-${flag(entryKey)}${specs[entryKey]}`,
     });
     output.push({
       ...exit,
-      name: `双跳-${String(index + 1).padStart(2, '0')}-${specs[entryKey]}→${specs[exitKey]}`,
+      name: `双跳-${String(index + 1).padStart(2, '0')}-${flag(exitKey)}${specs[entryKey]}→${specs[exitKey]}`,
       'underlying-proxy': entries.get(entryKey).name,
     });
   }
