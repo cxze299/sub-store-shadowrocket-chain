@@ -1,18 +1,22 @@
 # iPhone 推荐方案
 
-手机 → 香港/新加坡 → 美国。采用 Sub-Store 生成双跳 + Shadowrocket fallback 检测切换 + 每小时订阅更新。优先稳定性，不承诺线路永远可用。
+手机 → 测试标准香港 → 美国。采用 Sub-Store 生成双跳 + Shadowrocket fallback 检测切换；订阅更新独立设置。优先采用本机实测通过的组合，不承诺线路永远可用。
 
 ## Sub-Store
 
 新建组合订阅，选择原始订阅，最后添加远程脚本操作：
 
 ```text
-https://raw.githubusercontent.com/cxze299/sub-store-shadowrocket-chain/main/chain.js
+https://mouss.synology.me:1050/chain.js?v=20261104-2
 ```
 
 脚本后不要重命名或删除入口，否则引用会失效。不要将输出作为输入。已带前置代理的源节点会报错，避免意外嵌套。
 
-当前名称应匹配 5 个入口和 3 个美国出口，生成 20 个节点（5 个入口、15 个双跳）。导出选择 Shadowrocket，在小火箭新建订阅，备注为「美国双跳」。保留原订阅用于回滚。
+当前订阅匹配 1 个入口和 4 个美国出口，生成 5 个节点（4 个双跳、1 个入口）。首条应为 `双跳-港测试→美测试`，入口在最后。出口备选依次为美低倍、美高级、美国际；不保证住宅 IP。导出选择 Shadowrocket，更新「美国双跳」订阅。保留原订阅用于回滚。
+
+若仍显示旧名称，将脚本地址更新为上述带版本参数的 NAS 地址，保存并重新预览，再更新小火箭订阅。Git 备份：`https://raw.githubusercontent.com/cxze299/sub-store-shadowrocket-chain/main/chain.js`。
+
+本次 4 条双跳在电脑 Mihomo 均通过 3 轮测试；国际香港/韩国/新加坡入口的组合均失败，暂不生成。此结果不等同于 iPhone 实测。所有双跳共享同一入口，入口不可用时整个双跳组都可能失败。
 
 ## 小火箭自动分组
 

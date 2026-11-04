@@ -1,32 +1,36 @@
-// Sub-Store Script Operator: HK/SG entry -> US exit.
+// Sub-Store Script Operator: measured HK entry -> US exits.
+// Two direct benchmarks + three chained checks (2026-11-04); not a live health check.
 function operator(proxies) {
-  const entries = proxies.filter(p => /AC(?:PS|SS|AS)-(?:HK(?:BGP)?|SG)\s*\|/i.test(p.name));
-  const exits = proxies.filter(p => /AC(?:PS|SS|AS)-USA?\s*\|/i.test(p.name));
-  entries.sort((a, b) => Number(/ACPS-HKBGP\s*\|/i.test(b.name)) - Number(/ACPS-HKBGP\s*\|/i.test(a.name)));
-  exits.sort((a, b) => {
-    const rank = p => /ACPS-US\s*\|/i.test(p.name) && !/家宽|住宅/.test(p.name) ? 0 : /ACPS-US\s*\|/i.test(p.name) ? 1 : 2;
-    return rank(a) - rank(b);
-  });
+  const entryRules = [
+    [/\[测试-标准\]\s*ACSS-HK\s*\|/i, '港测试'],
+  ];
+  const exitRules = [
+    [/\[测试-标准\]\s*ACSS-USA?\s*\|/i, '美测试'],
+    [/\[测试\]\s*ACSS-USA?\s*\|/i, '美低倍'],
+    [/\[测试-高级\]\s*ACAS-US2\s*\|/i, '美高级'],
+    [/ACGO-US\s*\|/i, '美国际'],
+  ];
+  function select(rules) {
+    return rules.flatMap(([pattern, label]) => proxies
+      .filter(p => pattern.test(p.name || ''))
+      .map(p => ({ proxy: p, label })));
+  }
+  const entries = select(entryRules);
+  const exits = select(exitRules);
 
   const chainKeys = ['underlying-proxy', 'dialer-proxy', 'chain', 'detour', 'prev_hop'];
-  if ([...entries, ...exits].some(p => chainKeys.some(key => p[key]))) {
+  if (proxies.some(p => /^双跳-|^入口-/.test(p.name || '') || chainKeys.some(key => p[key]))) {
     throw new Error('源节点已有前置代理，请使用原始订阅，勿重复处理双跳输出。');
   }
 
   if (!entries.length || !exits.length) {
-    throw new Error(`未找到入口或美国出口：入口 ${entries.length} 个，出口 ${exits.length} 个。`);
+    throw new Error(`未找到测速优选入口或美国出口：入口 ${entries.length} 个，出口 ${exits.length} 个。请使用含国际/测试线路的原始订阅。`);
   }
 
-  function shortName(p) {
-    const match = p.name.match(/AC(PS|SS|AS)-(HKBGP|HK|SG|USA|US)\s*\|/i);
-    const tier = { PS: '专业', SS: '标准', AS: '高级' }[match[1].toUpperCase()];
-    const region = { HKBGP: '香港多线', HK: '香港', SG: '新加坡', US: '美国', USA: '美国' }[match[2].toUpperCase()];
-    return `${region}${tier}${/家宽|住宅/.test(p.name) ? '家宽' : ''}`;
-  }
   function uniqueNames(items, prefix) {
     const counts = {};
     return items.map(p => {
-      const base = `${prefix}${shortName(p)}`;
+      const base = `${prefix}${p.label}`;
       counts[base] = (counts[base] || 0) + 1;
       return counts[base] === 1 ? base : `${base}-${counts[base]}`;
     });
@@ -34,14 +38,15 @@ function operator(proxies) {
   const entryNames = uniqueNames(entries, '入口-');
   const exitNames = uniqueNames(exits, '');
   const entryNodes = entries.map((p, i) => ({
-    ...p,
+    ...p.proxy,
     name: entryNames[i],
   }));
   const chains = [];
-  for (const entry of entryNodes) {
-    for (const [i, exit] of exits.entries()) {
+  // Prefer all routes to the best US exit before trying a weaker exit.
+  for (const [i, exit] of exits.entries()) {
+    for (const entry of entryNodes) {
       chains.push({
-        ...exit,
+        ...exit.proxy,
         name: `双跳-${entry.name.slice(3)}→${exitNames[i]}`,
         'underlying-proxy': entry.name,
       });
