@@ -1,64 +1,49 @@
-// Snapshot 2026-11-04: 476 screened; 54 shortlisted; 6/6 checks + 2 isolated downloads required.
-// Static route order; live failover remains a client responsibility.
+// Updated 2026-11-04 22:56 +08:00. 714 pairs screened, 58 shortlisted.
+// Every selected route passed 6 checks and 2 fresh-connection downloads.
+// Static preference snapshot; client handles live health checks and failover.
 // Sub-Store Script Operator: benchmark-selected routes across this subscription.
 // Generated route data is inserted by the local benchmark build step.
 function operator(proxies) {
   const routes = [
   [
-    "[国际]|ACGO-HK||",
-    "[专业]|ACPS-HKBGP||"
-  ],
-  [
-    "[国际]|ACGO-SG||",
+    "[高级]|ACAS-HK||",
     "[标准]|ACSS-HK||"
   ],
   [
-    "[测试-标准]|ACSS-HK||",
-    "[国际]|ACGO-HK||"
+    "[专业]|ACPS-JP||",
+    "[标准]|ACSS-HK||"
   ],
   [
-    "[国际]|ACGO-HK||",
-    "[专业]|ACPS-KR||"
+    "[标准]|ACSS-HK||",
+    "[高级]|ACAS-HK||"
   ],
   [
-    "[国际]|ACGO-SG||",
+    "[高级]|ACAS-HK||",
     "[高级]|ACAS-SG||"
   ],
   [
-    "[国际]|ACGO-SG||",
-    "[专业]|ACPS-JP2||"
+    "[标准]|ACSS-HK||",
+    "[专业]|ACPS-KR||"
   ],
   [
-    "[测试]|ACTS-JP1||直连",
+    "[专业]|ACPS-JP2||",
+    "[专业]|ACPS-HKBGP||"
+  ],
+  [
+    "[专业+]|ACPS-US|住宅|",
     "[测试]|ACSS-USA||"
-  ],
-  [
-    "[国际]|ACGO-HK||",
-    "[专业]|ACPS-FR||"
-  ],
-  [
-    "[测试-标准]|ACSS-HK||",
-    "[国际]|ACGO-DE||"
-  ],
-  [
-    "[测试-标准]|ACSS-HK||",
-    "[标准]|ACSS-RU||"
   ]
 ];
   const specs = {
-  "[国际]|ACGO-HK||": "港国际",
-  "[专业]|ACPS-HKBGP||": "港多专",
-  "[国际]|ACGO-SG||": "新国际",
+  "[高级]|ACAS-HK||": "港高",
   "[标准]|ACSS-HK||": "港标",
-  "[测试-标准]|ACSS-HK||": "港测",
-  "[专业]|ACPS-KR||": "韩专",
+  "[专业]|ACPS-JP||": "日专",
   "[高级]|ACAS-SG||": "新高",
+  "[专业]|ACPS-KR||": "韩专",
   "[专业]|ACPS-JP2||": "日东专",
-  "[测试]|ACTS-JP1||直连": "日软测",
-  "[测试]|ACSS-USA||": "美低倍",
-  "[专业]|ACPS-FR||": "法专",
-  "[国际]|ACGO-DE||": "德国际",
-  "[标准]|ACSS-RU||": "俄标"
+  "[专业]|ACPS-HKBGP||": "港多专",
+  "[专业+]|ACPS-US|住宅|": "美宅",
+  "[测试]|ACSS-USA||": "美低倍"
 };
   const chainKeys = ['underlying-proxy', 'dialer-proxy', 'chain', 'detour', 'prev_hop'];
   if (!Array.isArray(proxies)) throw new Error('请提供原始订阅节点数组。');
