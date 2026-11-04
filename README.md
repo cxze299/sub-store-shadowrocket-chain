@@ -2,6 +2,7 @@
 
 | 脚本 | 用途 | 固定远程地址 | 设置与实测 |
 | --- | --- | --- | --- |
+| `single-hop.js` | iPhone 日常主用的原始节点优选，不额外串联 | https://mouss.synology.me:1050/single-hop.js | [SINGLE-HOP.md](SINGLE-HOP.md) |
 | `chain.js` | AI 专用双跳优选，新加坡主用及同区备用，美日韩候选 | https://mouss.synology.me:1050/chain.js | [AI.md](AI.md)、[SETUP.md](SETUP.md) |
 | `chain-best.js` | 全地区双跳优选 | https://mouss.synology.me:1050/chain-best.js | [BEST.md](BEST.md) |
 
