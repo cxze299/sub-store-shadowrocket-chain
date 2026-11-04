@@ -1,41 +1,38 @@
-// Updated 2026-11-04 23:19 +08:00. AI-focused snapshot; static preference, client performs health checks.
-// OpenAI/Claude API 401 = authentication required, NOT proof of successful AI inference.
-// ChatGPT web probes encountered anti-bot challenges; confirm in your browser.
+// Updated 2026-11-04 23:55 +08:00. AI-focused snapshot; static preference, client performs health checks.
 // Sub-Store Script Operator: AI-focused, measured two-hop routes; no login or inference guarantee.
-// Generated route data is inserted by the local benchmark build step.
 function operator(proxies) {
   const routes = [
-  [
-    "[高级]|ACAS-HK||",
-    "[高级]|ACAS-SG||"
-  ],
-  [
-    "[标准]|ACSS-JP||",
-    "[高级]|ACAS-SG||"
-  ],
-  [
-    "[专业+]|ACPS-US|住宅|",
-    "[国际]|ACGO-US||"
-  ],
-  [
-    "[高级]|ACAS-HK||",
-    "[专业]|ACPS-KR||"
-  ],
-  [
-    "[标准]|ACSS-HK||",
-    "[专业]|ACPS-JP||"
-  ]
-];
+    [
+      "[高级]|ACAS-HK||",
+      "[专业+]|ACPS-US|住宅|"
+    ],
+    [
+      "[高级]|ACAS-HK||",
+      "[高级]|ACAS-US||"
+    ],
+    [
+      "[高级]|ACAS-HK||",
+      "[高级]|ACAS-SG||"
+    ],
+    [
+      "[标准]|ACSS-TW||",
+      "[专业]|ACPS-US||"
+    ],
+    [
+      "[标准]|ACSS-HK||",
+      "[专业]|ACPS-JP2||"
+    ]
+  ];
   const specs = {
-  "[高级]|ACAS-HK||": "港高",
-  "[高级]|ACAS-SG||": "新高",
-  "[标准]|ACSS-JP||": "日标",
-  "[专业+]|ACPS-US|住宅|": "美宅",
-  "[国际]|ACGO-US||": "美国际",
-  "[专业]|ACPS-KR||": "韩专",
-  "[标准]|ACSS-HK||": "港标",
-  "[专业]|ACPS-JP||": "日专"
-};
+    "[高级]|ACAS-HK||": "港高",
+    "[高级]|ACAS-SG||": "新高",
+    "[标准]|ACSS-TW||": "台商",
+    "[专业+]|ACPS-US|住宅|": "美宅",
+    "[高级]|ACAS-US||": "美高",
+    "[专业]|ACPS-US||": "美专",
+    "[专业]|ACPS-JP2||": "日东专",
+    "[标准]|ACSS-HK||": "港标"
+  };
   const chainKeys = ['underlying-proxy', 'dialer-proxy', 'chain', 'detour', 'prev_hop'];
   if (!Array.isArray(proxies)) throw new Error('请提供原始订阅节点数组。');
   if (proxies.some(p => /^双跳-|^入口-/.test(p.name || '') || chainKeys.some(k => p[k]))) {
@@ -47,7 +44,6 @@ function operator(proxies) {
     const code = (text.match(/AC[A-Z]+-[A-Z]+\d*/i) || [''])[0].toUpperCase();
     return [tier, code, /家宽|住宅/.test(text) ? '住宅' : '', /三网直连/.test(text) ? '直连' : ''].join('|');
   }
-  // Put the exit flag before any entry location while preserving group regexes.
   function flag(key) {
     const code = (key.match(/AC[A-Z]+-([A-Z]+)/) || [])[1];
     return { HK: '🇭🇰', HKBGP: '🇭🇰', SG: '🇸🇬', KR: '🇰🇷',
@@ -70,7 +66,7 @@ function operator(proxies) {
     if (!entry || !exit) continue;
     if (entry.server === exit.server && entry.port === exit.port) continue;
     if (!entries.has(entryKey)) entries.set(entryKey, {
-      ...entry, name: `入口-AI-${flag(entryKey)}${specs[entryKey]}`,
+      ...entry, name: `入口-AI-${specs[entryKey]}`,
     });
     output.push({
       ...exit,

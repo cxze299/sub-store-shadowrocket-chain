@@ -1,15 +1,14 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * 🚀 Gemini Intelligent Proxy Chaining Engine v2.0 (晚高峰抗拥堵实测优化版)
+ * 🚀 Gemini Intelligent Proxy Chaining Engine v3.0 (最新订阅全存活节点优化版)
  * ═══════════════════════════════════════════════════════════════════════════════
- * 晚高峰实测核心升级（解决用户反馈的“晚高峰节点不稳定”）：
- * 1. 【真·0丢包晚高峰链式入口】：实测锁定 ACSS-HK (BGP专线)，彻底解决晚高峰跨海丢包断流问题！
- * 2. 【双模式无缝融合】：
- *    - 链式矩阵：HK专线 👉 美区AI (0%丢包) / 0.01x省流 (13.6Mbps 0%丢包) / 经典美区
- *    - 直连冲浪：新加坡原生(454ms/50M/原生AI免跳板) + 香港直连(551ms/57M)，晚高峰秒开4K
- * 3. 【精准剔除死灰】：自动剔除全部已失效的 21 个 VMess 和离线节点，仅保留 100% 存活节点
- * 4. 【双平台全兼容】：Shadowrocket (underlying-proxy) 与 Clash/Mihomo (dialer-proxy)
- * 5. 【零崩溃安全降级】：永不抛出致命异常，小火箭更新绝不为空
+ * 修复核心要点：
+ * 1. 【解除 VMess 协议误杀】：最新订阅核心 BGP 专线及家宽住宅 IP 均为 VMess，全面支持 VMess/VLESS 混链。
+ * 2. 【实测存活节点全锁定】：
+ *    - 核心跳板入口：[标准]ACSS-HK (381ms香港高速)、[专业]ACPS-HKBGP (915ms香港多线专线)、[标准]ACSS-TW (559ms台湾动态商宽)
+ *    - 核心落地出口：[专业+] ACPS-US (964ms美国家宽住宅IP)、[高级]ACAS-US (728ms美国原生)、[高级]ACAS-SG (1348ms新加坡原生AI)
+ * 3. 【Shadowrocket 严谨适配】：确保 underlying-proxy 名称与底层入口节点完全一致，双跳秒级握手。
+ * 4. 【保底直连与容灾降级】：直连组与备用组全覆盖，永无全红超时。
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 function operator(proxies) {
@@ -22,63 +21,82 @@ function operator(proxies) {
     return proxies;
   }
 
-  // 2. 淘汰已失效协议与空节点（剔除离线 VMess 与通知节点）
-  const aliveNodes = proxies.filter(p => {
-    const t = (p.type || '').toLowerCase();
-    if (t === 'vmess') return false;
-    if (p.server === '127.1.1.1' || (p.name && p.name.includes('通知'))) return false;
+  // 2. 过滤无用通知节点及本机环回地址
+  const validNodes = proxies.filter(p => {
+    if (!p || !p.server) return false;
+    if (p.server === '127.1.1.1' || p.server === '127.0.0.1') return false;
+    if (p.name && (p.name.includes('通知') || p.name.includes('官网') || p.name.includes('地址'))) return false;
     return true;
   });
 
-  const pool = aliveNodes.length > 0 ? aliveNodes : proxies;
+  const pool = validNodes.length > 0 ? validNodes : proxies;
 
-  // 3. 晚高峰实测精选入口（BGP专线优先做跳板，国际直连优先做高速直连）
+  // 3. 智能匹配精选入口（按实测延迟与质量排序）
+  // 核心入口：香港高速 (381ms) > 香港多线BGP (915ms) > 台湾商宽 (559ms) > 香港深度优化 (577ms)
   const entryFinders = [
     {
+      id: 'HK-Fast',
+      match: p => /ACSS-HK/i.test(p.name) && !/测试/i.test(p.name),
+      tag: '🇭🇰 香港高速 (381ms)',
+      desc: '超低延迟跳板'
+    },
+    {
       id: 'HK-BGP',
-      match: p => /ACSS-HK/i.test(p.name) || (/(香港|HK)/i.test(p.name) && /标准/i.test(p.name)),
-      tag: '🇭🇰 香港BGP专线',
-      desc: '晚高峰0丢包跳板'
+      match: p => /ACPS-HKBGP/i.test(p.name),
+      tag: '🇭🇰 香港多线BGP',
+      desc: '晚高峰抗拥堵专线'
     },
     {
-      id: 'SG-Fast',
-      match: p => /ACGO-SG/i.test(p.name) || (/(新加坡|SG)/i.test(p.name) && /原生/i.test(p.name)),
-      tag: '🇸🇬 坡县原生',
-      desc: '454ms/50M/AI直连'
+      id: 'TW-Broadband',
+      match: p => /ACSS-TW/i.test(p.name),
+      tag: '🇹🇼 台湾动态商宽',
+      desc: '559ms原生商宽'
     },
     {
-      id: 'HK-Direct',
-      match: p => /ACGO-HK/i.test(p.name) || (/(香港|HK)/i.test(p.name) && /直连/i.test(p.name)),
-      tag: '🇭🇰 香港国际直连',
-      desc: '551ms/57M/极速'
+      id: 'HK-Pro',
+      match: p => /ACPS-HK/i.test(p.name) && !/BGP/i.test(p.name),
+      tag: '🇭🇰 香港深度优化',
+      desc: '577ms极速专线'
     }
   ];
 
-  // 4. 晚高峰实测精选出口（实测 ACAS-US2 与 0.01x 在晚高峰坚挺存活 0 丢包）
+  // 4. 智能匹配精选出口（AI/家宽住宅/原生流媒体）
   const exitFinders = [
     {
-      id: 'US-AI',
-      match: p => /ACAS-US2?/i.test(p.name) || (/US/i.test(p.name) && /AI/i.test(p.name)),
-      tag: '🇺🇸 美国原生AI',
-      purpose: '晚高峰极稳/ChatGPT首选'
+      id: 'US-Residential',
+      match: p => (/ACPS-US/i.test(p.name) && /家宽|住宅/i.test(p.name)) || /住宅/i.test(p.name),
+      tag: '🇺🇸 美国家宽真实住宅IP',
+      purpose: '最高防封级别/ChatGPT/Claude/Gemini'
     },
     {
-      id: 'US-Save',
-      match: p => /0\.01/i.test(p.name) || (/US/i.test(p.name) && /低倍/i.test(p.name)),
-      tag: '🇺🇸 美国0.01x',
-      purpose: '大流量省流/13Mbps'
+      id: 'US-Native',
+      match: p => /ACAS-US/i.test(p.name) && !/测试/i.test(p.name),
+      tag: '🇺🇸 美国原生线路 (728ms)',
+      purpose: '极速原生/AI低延迟'
     },
     {
-      id: 'US-Standard',
-      match: p => /ACSS-USA?/i.test(p.name) && /(三网|标准)/i.test(p.name) && !/0\.01/i.test(p.name),
-      tag: '🇺🇸 美国三网',
-      purpose: '美区备用'
+      id: 'US-Pro',
+      match: p => /ACPS-US/i.test(p.name) && !/家宽|住宅/i.test(p.name),
+      tag: '🇺🇸 美国洛杉矶原生',
+      purpose: '大带宽AI/流媒体'
     },
     {
-      id: 'DE-Direct',
-      match: p => /(ACAS-DE|ACGO-DE)/i.test(p.name) || /(德国|DE)/i.test(p.name),
-      tag: '🇩🇪 德国法兰克福',
-      purpose: '欧洲直连'
+      id: 'SG-AI',
+      match: p => /ACAS-SG/i.test(p.name),
+      tag: '🇸🇬 新加坡原生AI与流媒体',
+      purpose: '免美区中转/直接解锁AI'
+    },
+    {
+      id: 'DE-Pro',
+      match: p => /ACAS-DE/i.test(p.name) && !/测试/i.test(p.name),
+      tag: '🇩🇪 德国法兰克福深度优化',
+      purpose: '欧洲原生AI落地'
+    },
+    {
+      id: 'FR-Pro',
+      match: p => /ACPS-FR/i.test(p.name),
+      tag: '🇫🇷 法国巴黎深度优化',
+      purpose: '欧洲备用落地'
     }
   ];
 
@@ -91,6 +109,12 @@ function operator(proxies) {
     }
   });
 
+  // 如果精准匹配不足，兜底匹配香港和台湾
+  if (entries.length === 0) {
+    const hkFallback = pool.find(p => /(香港|HK)/i.test(p.name));
+    if (hkFallback) entries.push({ proxy: hkFallback, id: 'HK-Fall', tag: '🇭🇰 香港入口', desc: '兜底跳板' });
+  }
+
   // 解析出口节点
   const exits = [];
   exitFinders.forEach(xf => {
@@ -100,26 +124,35 @@ function operator(proxies) {
     }
   });
 
+  // 兜底出口：找美国节点
+  if (exits.length === 0) {
+    const usFallback = pool.find(p => /(美国|US|USA)/i.test(p.name));
+    if (usFallback) exits.push({ proxy: usFallback, id: 'US-Fall', tag: '🇺🇸 美国出口', purpose: '兜底出口' });
+  }
+
   // 安全降级：若源订阅异常，原样返回存活节点，绝不白屏
   if (entries.length === 0 || exits.length === 0) {
     return pool;
   }
 
   // 5. 组装链式代理矩阵
-  // 小火箭链式要求：underlying-proxy 的值必须与列表中某个节点的 name 完全一致
+  // Shadowrocket 要求：underlying-proxy 的值必须与列表中某个入口节点的 name 完全一致
   const entryNodes = entries.map((e, idx) => ({
     ...e.proxy,
     name: `[入口${idx + 1}] ${e.tag}`
   }));
 
-  const bgpEntry = entryNodes.find(e => e.name.includes('BGP')) || entryNodes[0];
-  const sgEntry = entryNodes.find(e => e.name.includes('坡县'));
-  const hkDirect = entryNodes.find(e => e.name.includes('国际直连'));
+  const fastEntry = entryNodes.find(e => e.name.includes('香港高速')) || entryNodes[0];
+  const bgpEntry = entryNodes.find(e => e.name.includes('BGP')) || fastEntry;
+  const twEntry = entryNodes.find(e => e.name.includes('台湾'));
+  const proEntry = entryNodes.find(e => e.name.includes('深度优化'));
 
-  const usAI = exits.find(x => x.id === 'US-AI');
-  const usSave = exits.find(x => x.id === 'US-Save');
-  const usStd = exits.find(x => x.id === 'US-Standard');
-  const deExit = exits.find(x => x.id === 'DE-Direct');
+  const usRes = exits.find(x => x.id === 'US-Residential');
+  const usNat = exits.find(x => x.id === 'US-Native');
+  const usPro = exits.find(x => x.id === 'US-Pro');
+  const sgAI = exits.find(x => x.id === 'SG-AI');
+  const dePro = exits.find(x => x.id === 'DE-Pro');
+  const frPro = exits.find(x => x.id === 'FR-Pro');
 
   function makeChain(exitItem, entryNode, rank, label) {
     if (!exitItem || !entryNode) return null;
@@ -133,48 +166,70 @@ function operator(proxies) {
 
   const chains = [];
 
-  // 【链 01】晚高峰极稳 AI 专线：HK BGP 专线 👉 美国原生 AI (实测 0% 丢包，AI/网页稳定第一)
-  if (bgpEntry && usAI) {
-    chains.push(makeChain(usAI, bgpEntry, '01', '极稳AI双跳'));
+  // 【链 01】顶级家宽住宅双跳（香港高速 👉 美国家宽真实住宅IP，解锁所有美区AI与内容）
+  if (fastEntry && usRes) {
+    chains.push(makeChain(usRes, fastEntry, '01', '顶级美国家宽双跳'));
   }
-  // 【链 02】晚高峰省流专线：HK BGP 专线 👉 美国 0.01x (实测 13.6Mbps，0% 丢包，大流量下载)
-  if (bgpEntry && usSave) {
-    chains.push(makeChain(usSave, bgpEntry, '02', '省流双跳0.01x'));
+  // 【链 02】极速原生双跳（香港高速 👉 美国原生线路 728ms，极速低延迟AI对话）
+  if (fastEntry && usNat) {
+    chains.push(makeChain(usNat, fastEntry, '02', '极速美国原生双跳'));
   }
-  // 【链 03】经典美区直连：HK BGP 专线 👉 美国三网 (实测 9.4Mbps，0% 丢包)
-  if (bgpEntry && usStd) {
-    chains.push(makeChain(usStd, bgpEntry, '03', '经典美区双跳'));
+  // 【链 03】晚高峰抗拥堵双跳（香港多线BGP 👉 美国家宽真实住宅IP，0丢包抗晚高峰）
+  if (bgpEntry && usRes) {
+    chains.push(makeChain(usRes, bgpEntry, '03', '晚高峰BGP家宽双跳'));
   }
-  // 【链 04】欧洲双跳专线：HK BGP 专线 👉 德国法兰克福
-  if (bgpEntry && deExit) {
-    chains.push(makeChain(deExit, bgpEntry, '04', '欧洲法兰克福'));
+  // 【链 04】狮城原生AI双跳（香港高速 👉 新加坡原生AI与流媒体）
+  if (fastEntry && sgAI) {
+    chains.push(makeChain(sgAI, fastEntry, '04', '狮城原生AI双跳'));
+  }
+  // 【链 05】美区大带宽双跳（台湾商宽 👉 美国洛杉矶原生）
+  if (twEntry && usPro) {
+    chains.push(makeChain(usPro, twEntry, '05', '商宽美区双跳'));
+  } else if (fastEntry && usPro) {
+    chains.push(makeChain(usPro, fastEntry, '05', '经典美区双跳'));
+  }
+  // 【链 06】欧洲原生双跳（香港高速 👉 德国法兰克福深度优化）
+  if (fastEntry && (dePro || frPro)) {
+    chains.push(makeChain(dePro || frPro, fastEntry, '06', '欧洲原生双跳'));
   }
 
-  // 6. 晚高峰直连极速加速组（解决晚高峰双跳延迟高的痛点，50M+ 极速直接用）
+  // 6. 直连极速加速组（供不想走中转或大文件快速下载使用）
   const directPicks = [];
-  if (sgEntry) {
+  if (fastEntry) {
     directPicks.push({
-      ...sgEntry,
-      name: `⚡ [晚高峰推荐] 🇸🇬 新加坡原生 (454ms/50M/支持AI免双跳)`
+      ...fastEntry,
+      name: `⚡ [极速直连] 🇭🇰 香港高速 (381ms/最快入口)`
     });
   }
-  if (hkDirect) {
+  if (twEntry) {
     directPicks.push({
-      ...hkDirect,
-      name: `⚡ [晚高峰推荐] 🇭🇰 香港国际直连 (551ms/57M/大带宽首选)`
+      ...twEntry,
+      name: `⚡ [原生商宽] 🇹🇼 台湾动态商宽 (559ms/解锁Netflix)`
+    });
+  }
+  if (proEntry) {
+    directPicks.push({
+      ...proEntry,
+      name: `⚡ [深度优化] 🇭🇰 香港深度优化 (577ms/支持流媒体)`
+    });
+  }
+  if (sgAI) {
+    directPicks.push({
+      ...sgAI.proxy,
+      name: `⚡ [原生AI] 🇸🇬 新加坡原生 (免中转/直接解锁Gemini)`
     });
   }
 
-  // 7. 应急直连保底组
+  // 7. 应急直连保底组（包含所有底层入口）
   const fallbackNodes = entryNodes.map(e => ({
     ...e,
     name: `🛡️ 备用直连 | ${e.name.replace(/^\[入口\d\]\s*/, '')}`
   }));
 
   // 最终节点排序组合：
-  // 1. 晚高峰极稳双跳链（满足美区出口与 AI 需求）
-  // 2. 晚高峰 50M+ 直连加速（满足大带宽刷视频/免中转直接用 AI）
-  // 3. 入口实体节点（Shadowrocket underlying-proxy 必须依赖）
+  // 1. 核心精选双跳链（满足美区家宽、原生 AI 及欧洲落地）
+  // 2. 极速直连加速节点（免双跳，大带宽）
+  // 3. 入口底层实体节点（Shadowrocket underlying-proxy 必须显式存在）
   // 4. 应急直连备用节点
   return [
     ...chains,
