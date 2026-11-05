@@ -1,8 +1,6 @@
-// Updated 2026-11-04 22:56 +08:00. 714 pairs screened, 58 shortlisted.
-// Every selected route passed 6 checks and 2 fresh-connection downloads.
-// Static preference snapshot; client handles live health checks and failover.
-// Sub-Store Script Operator: benchmark-selected routes across this subscription.
-// Generated route data is inserted by the local benchmark build step.
+// Updated 2026-11-05: prior shortlist plus optional US datacenter candidates.
+// New US routes are unmeasured; no residential entry or test exit.
+// Static preference; client performs health checks.
 function operator(proxies) {
   const routes = [
   [
@@ -30,9 +28,10 @@ function operator(proxies) {
     "[专业]|ACPS-HKBGP||"
   ],
   [
-    "[专业+]|ACPS-US|住宅|",
-    "[测试]|ACSS-USA||"
-  ]
+    "[高级]|ACAS-HK||",
+    "[高级]|ACAS-US||"
+  ],
+  ["[高级]|ACAS-HK||", "[国际]|ACGO-US||"]
 ];
   const specs = {
   "[高级]|ACAS-HK||": "港高",
@@ -42,8 +41,8 @@ function operator(proxies) {
   "[专业]|ACPS-KR||": "韩专",
   "[专业]|ACPS-JP2||": "日东专",
   "[专业]|ACPS-HKBGP||": "港多专",
-  "[专业+]|ACPS-US|住宅|": "美宅",
-  "[测试]|ACSS-USA||": "美低倍"
+  "[高级]|ACAS-US||": "美高",
+  "[国际]|ACGO-US||": "美国际"
 };
   const chainKeys = ['underlying-proxy', 'dialer-proxy', 'chain', 'detour', 'prev_hop'];
   if (!Array.isArray(proxies)) throw new Error('请提供原始订阅节点数组。');

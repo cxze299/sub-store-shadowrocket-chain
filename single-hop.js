@@ -1,5 +1,5 @@
 // Sub-Store: original optimized nodes, without an extra client-created hop.
-// Snapshot 2026-11-05: these six nodes passed both HTTPS targets 3/3.
+// Updated 2026-11-05: purpose-based shortlist; added candidates are unmeasured.
 // No throughput or authenticated AI access guarantee; client handles failover.
 function operator(proxies) {
   if (!Array.isArray(proxies)) throw new Error('请提供原始订阅节点数组。');
@@ -13,6 +13,9 @@ function operator(proxies) {
     [/^\[专业\]\s*ACPS-HKBGP\s*\|/i, '单跳-🇭🇰港多专'],
     [/^\[高级\]\s*ACAS-SG\s*\|/i, '单跳-🇸🇬新高'],
     [/^\[专业\]\s*ACPS-JP2\s*\|/i, '单跳-🇯🇵日东专'],
+    [/^\[专业\]\s*ACPS-JP\s*\|/i, '单跳-🇯🇵日专'],
+    [/^\[高级\]\s*ACAS-US(?=\s|\||[（(]|$)/i, '单跳-🇺🇸美高'],
+    [/^\[国际\]\s*ACGO-US(?=\s|\||[（(]|$)/i, '单跳-🇺🇸美国际'],
     [/^\[专业\+\]\s*ACPS-US\s*\|/i, '单跳-🇺🇸美宅'],
   ];
   const output = [];

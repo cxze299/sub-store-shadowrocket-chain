@@ -1,29 +1,34 @@
-// Updated 2026-11-04 23:55 +08:00. AI-focused snapshot; static preference, client performs health checks.
-// Sub-Store Script Operator: AI-focused, measured two-hop routes; no login or inference guarantee.
+// Updated 2026-11-05: purpose-based preference, not a new benchmark.
+// AI availability requires client verification; residential exit is opt-in, last.
 function operator(proxies) {
   const routes = [
-    [
-      "[高级]|ACAS-HK||",
-      "[专业+]|ACPS-US|住宅|"
-    ],
-    [
-      "[高级]|ACAS-HK||",
-      "[高级]|ACAS-US||"
-    ],
-    [
-      "[高级]|ACAS-HK||",
-      "[高级]|ACAS-SG||"
-    ],
-    [
-      "[标准]|ACSS-TW||",
-      "[专业]|ACPS-US||"
-    ],
-    [
-      "[标准]|ACSS-HK||",
-      "[专业]|ACPS-JP2||"
-    ]
-  ];
+  [
+    "[高级]|ACAS-HK||",
+    "[高级]|ACAS-SG||"
+  ],
+  [
+    "[标准]|ACSS-HK||",
+    "[专业]|ACPS-JP2||"
+  ],
+  [
+    "[高级]|ACAS-HK||",
+    "[高级]|ACAS-US||"
+  ],
+  [
+    "[高级]|ACAS-HK||",
+    "[国际]|ACGO-US||"
+  ],
+  [
+    "[标准]|ACSS-TW||",
+    "[专业]|ACPS-US||"
+  ],
+  [
+    "[高级]|ACAS-HK||",
+    "[专业+]|ACPS-US|住宅|"
+  ]
+];
   const specs = {
+    "[国际]|ACGO-US||": "美国际",
     "[高级]|ACAS-HK||": "港高",
     "[高级]|ACAS-SG||": "新高",
     "[标准]|ACSS-TW||": "台商",
@@ -35,7 +40,7 @@ function operator(proxies) {
   };
   const chainKeys = ['underlying-proxy', 'dialer-proxy', 'chain', 'detour', 'prev_hop'];
   if (!Array.isArray(proxies)) throw new Error('请提供原始订阅节点数组。');
-  if (proxies.some(p => /^双跳-|^入口-/.test(p.name || '') || chainKeys.some(k => p[k]))) {
+  if (proxies.some(p => /^(双跳-|入口-|单跳-)/.test(p.name || '') || chainKeys.some(k => p[k]))) {
     throw new Error('请使用原始订阅，不要重复处理链式输出或带前置代理的节点。');
   }
   function nodeKey(name) {
@@ -74,6 +79,6 @@ function operator(proxies) {
       'underlying-proxy': entries.get(entryKey).name,
     });
   }
-  if (!output.length) throw new Error('没有匹配到 AI 优选组合，请检查原始订阅是否包含国际、专业和测试线路。');
+  if (!output.length) throw new Error('没有匹配到 AI 候选组合，请检查原始订阅。');
   return [...output, ...entries.values()];
 }
