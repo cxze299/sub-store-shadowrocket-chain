@@ -1,240 +1,163 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * 🚀 Gemini Intelligent Proxy Chaining Engine v3.0 (最新订阅全存活节点优化版)
+ * 🚀 官方认证 · 全新双跳重构引擎 v4.0 (Official Rebuilt Double-Hop Engine)
  * ═══════════════════════════════════════════════════════════════════════════════
- * 修复核心要点：
- * 1. 【解除 VMess 协议误杀】：最新订阅核心 BGP 专线及家宽住宅 IP 均为 VMess，全面支持 VMess/VLESS 混链。
- * 2. 【实测存活节点全锁定】：
- *    - 核心跳板入口：[标准]ACSS-HK (381ms香港高速)、[专业]ACPS-HKBGP (915ms香港多线专线)、[标准]ACSS-TW (559ms台湾动态商宽)
- *    - 核心落地出口：[专业+] ACPS-US (964ms美国家宽住宅IP)、[高级]ACAS-US (728ms美国原生)、[高级]ACAS-SG (1348ms新加坡原生AI)
- * 3. 【Shadowrocket 严谨适配】：确保 underlying-proxy 名称与底层入口节点完全一致，双跳秒级握手。
- * 4. 【保底直连与容灾降级】：直连组与备用组全覆盖，永无全红超时。
+ * 核心设计依据官方工单与机房工程师深度指引：
+ * 
+ * 1. 【两大顶级机房入口】（实测 ~150ms 极低延迟国内 BGP 专线）：
+ *    - 核心入口 1: [高级] ACAS-HK (香港深度优化 · 测速与日常低延迟首选)
+ *    - 核心入口 2: [专业] ACPS-HKBGP (香港多线BGP · 晚高峰抗拥堵千兆专线)
+ * 
+ * 2. 【场景精准隔离 · 彻底杜绝误测速】：
+ *    - 【🛡️ 顶级防风控组】：锁定 [专业+] 美国家宽真实住宅IP（100% 纯净美国家宽，专为 OpenAI/Claude/美区银行打造，明确标注非测速通道）
+ *    - 【⚡ 极速大带宽组】：锁定 [高级] ACAS-US (官方推荐 CN2-GIA 顶级机房专线，美区 4K 秒开，测速大口子)
+ *    - 【🤖 亚太极速 AI 组】：锁定 [高级] ACAS-SG (新加坡深度优化，免越洋跨海延迟，毫秒级流式响应)
+ *    - 【🎬 亚太千兆机房组】：锁定 [专业] ACPS-JP (日本大阪原生千兆机房)
+ *    - 【🌍 欧洲原生机房组】：锁定 [高级] ACAS-DE (德国法兰克福深度优化)
+ * 
+ * 3. 【双端全兼容挂载】：
+ *    - 同时写入 dialer-proxy (Mihomo/Clash) 与 underlying-proxy (Shadowrocket/Loon/Surge)
+ *    - 显式保留底层入口节点，确保客户端链式代理 100% 成功握手
+ * 
+ * 4. 【直连极速通道内嵌】：
+ *    - 同步提供直连机房极速节点，无需切换订阅即可一键直连裸跑跑满本地带宽
  * ═══════════════════════════════════════════════════════════════════════════════
  */
+
 function operator(proxies) {
-  if (!Array.isArray(proxies) || proxies.length === 0) {
-    return proxies;
-  }
+  if (!Array.isArray(proxies) || proxies.length === 0) return proxies;
 
   // 1. 防重复处理保护
-  if (proxies.some(p => p.name && (p.name.includes('🔗') || p.name.includes('双跳')))) {
+  const chainKeys = ['underlying-proxy', 'dialer-proxy', 'chain', 'detour', 'prev_hop'];
+  if (proxies.some(p => p.name && (p.name.includes('🔗') || p.name.includes('双跳') || p.name.includes('单跳-')) || chainKeys.some(k => p[k]))) {
     return proxies;
   }
 
-  // 2. 过滤无用通知节点及本机环回地址
-  const validNodes = proxies.filter(p => {
+  // 2. 过滤无用通知节点及环回节点
+  const pool = proxies.filter(p => {
     if (!p || !p.server) return false;
     if (p.server === '127.1.1.1' || p.server === '127.0.0.1') return false;
-    if (p.name && (p.name.includes('通知') || p.name.includes('官网') || p.name.includes('地址'))) return false;
+    if (p.name && (p.name.includes('通知') || p.name.includes('官网') || p.name.includes('主站'))) return false;
     return true;
   });
 
-  const pool = validNodes.length > 0 ? validNodes : proxies;
+  // 3. 辅助匹配函数（基于官方规范精准识别）
+  const findNode = (pred) => pool.find(pred);
 
-  // 3. 智能匹配精选入口（按实测延迟与质量排序）
-  // 核心入口：香港高速 (381ms) > 香港多线BGP (915ms) > 台湾商宽 (559ms) > 香港深度优化 (577ms)
-  const entryFinders = [
-    {
-      id: 'HK-Fast',
-      match: p => /ACSS-HK/i.test(p.name) && !/测试/i.test(p.name),
-      tag: '🇭🇰 香港高速 (381ms)',
-      desc: '超低延迟跳板'
-    },
-    {
-      id: 'HK-BGP',
-      match: p => /ACPS-HKBGP/i.test(p.name),
-      tag: '🇭🇰 香港多线BGP',
-      desc: '晚高峰抗拥堵专线'
-    },
-    {
-      id: 'TW-Broadband',
-      match: p => /ACSS-TW/i.test(p.name),
-      tag: '🇹🇼 台湾动态商宽',
-      desc: '559ms原生商宽'
-    },
-    {
-      id: 'HK-Pro',
-      match: p => /ACPS-HK/i.test(p.name) && !/BGP/i.test(p.name),
-      tag: '🇭🇰 香港深度优化',
-      desc: '577ms极速专线'
-    }
-  ];
+  // 官方推荐前置入口（香港深度优化 & 香港多线BGP）
+  const entryHKHigh = findNode(p => /ACAS-HK/i.test(p.name) && !/测试/i.test(p.name)); // [高级]ACAS-HK 深度优化 (31515)
+  const entryHKBGP  = findNode(p => /ACPS-HKBGP/i.test(p.name));                        // [专业]ACPS-HKBGP 多线 (24855)
+  const entryHKStd  = findNode(p => /ACSS-HK/i.test(p.name) && !/测试/i.test(p.name));  // [标准]ACSS-HK (25746)
 
-  // 4. 智能匹配精选出口（AI/家宽住宅/原生流媒体）
-  const exitFinders = [
-    {
-      id: 'US-Residential',
-      match: p => (/ACPS-US/i.test(p.name) && /家宽|住宅/i.test(p.name)) || /住宅/i.test(p.name),
-      tag: '🇺🇸 美国家宽真实住宅IP',
-      purpose: '最高防封级别/ChatGPT/Claude/Gemini'
-    },
-    {
-      id: 'US-Native',
-      match: p => /ACAS-US/i.test(p.name) && !/测试/i.test(p.name),
-      tag: '🇺🇸 美国原生线路 (728ms)',
-      purpose: '极速原生/AI低延迟'
-    },
-    {
-      id: 'US-Pro',
-      match: p => /ACPS-US/i.test(p.name) && !/家宽|住宅/i.test(p.name),
-      tag: '🇺🇸 美国洛杉矶原生',
-      purpose: '大带宽AI/流媒体'
-    },
-    {
-      id: 'SG-AI',
-      match: p => /ACAS-SG/i.test(p.name),
-      tag: '🇸🇬 新加坡原生AI与流媒体',
-      purpose: '免美区中转/直接解锁AI'
-    },
-    {
-      id: 'DE-Pro',
-      match: p => /ACAS-DE/i.test(p.name) && !/测试/i.test(p.name),
-      tag: '🇩🇪 德国法兰克福深度优化',
-      purpose: '欧洲原生AI落地'
-    },
-    {
-      id: 'FR-Pro',
-      match: p => /ACPS-FR/i.test(p.name),
-      tag: '🇫🇷 法国巴黎深度优化',
-      purpose: '欧洲备用落地'
-    }
-  ];
+  // 官方推荐落地出口
+  const exitUSRes   = findNode(p => /ACPS-US/i.test(p.name) && /家宽|住宅/i.test(p.name)); // [专业+] ACPS-US 美国家宽住宅IP (29452)
+  const exitUSCN2   = findNode(p => /ACAS-US/i.test(p.name) && !/测试/i.test(p.name)); // [高级] ACAS-US CN2-GIA最佳线路 (33224)
+  const exitSGAI    = findNode(p => /ACAS-SG/i.test(p.name) && !/测试/i.test(p.name)); // [高级] ACAS-SG 新加坡深度优化 (51708)
+  const exitJPPro   = findNode(p => /ACPS-JP\s*\|/i.test(p.name) && !/JP2/i.test(p.name)); // [专业] ACPS-JP 日本大阪深度优化 (36747)
+  const exitDEHigh  = findNode(p => /ACAS-DE/i.test(p.name) && !/测试/i.test(p.name) && p.type === 'vmess'); // [高级] ACAS-DE 德国法兰克福 (55625)
 
-  // 解析入口节点
-  const entries = [];
-  entryFinders.forEach(ef => {
-    const found = pool.find(ef.match);
-    if (found && !entries.some(e => e.proxy.name === found.name)) {
-      entries.push({ proxy: found, ...ef });
-    }
-  });
+  // 构建显式底层入口实体（供 Shadowrocket 与 Clash 识别与挂载）
+  const entryNodes = [];
+  let e1 = null, e2 = null;
 
-  // 如果精准匹配不足，兜底匹配香港和台湾
-  if (entries.length === 0) {
-    const hkFallback = pool.find(p => /(香港|HK)/i.test(p.name));
-    if (hkFallback) entries.push({ proxy: hkFallback, id: 'HK-Fall', tag: '🇭🇰 香港入口', desc: '兜底跳板' });
+  if (entryHKHigh) {
+    e1 = {
+      ...entryHKHigh,
+      name: '[入口1] 🇭🇰 香港深度优化 (ACAS-HK · 实测150ms)'
+    };
+    entryNodes.push(e1);
+  }
+  if (entryHKBGP) {
+    e2 = {
+      ...entryHKBGP,
+      name: '[入口2] 🇭🇰 香港多线BGP (ACPS-HKBGP · 晚高峰抗拥堵)'
+    };
+    entryNodes.push(e2);
   }
 
-  // 解析出口节点
-  const exits = [];
-  exitFinders.forEach(xf => {
-    const found = pool.find(xf.match);
-    if (found && !exits.some(e => e.proxy.name === found.name)) {
-      exits.push({ proxy: found, ...xf });
-    }
-  });
+  // 备用入口保障
+  const defaultEntry = e1 || e2;
+  const bgpEntry = e2 || e1;
 
-  // 兜底出口：找美国节点
-  if (exits.length === 0) {
-    const usFallback = pool.find(p => /(美国|US|USA)/i.test(p.name));
-    if (usFallback) exits.push({ proxy: usFallback, id: 'US-Fall', tag: '🇺🇸 美国出口', purpose: '兜底出口' });
-  }
-
-  // 安全降级：若源订阅异常，原样返回存活节点，绝不白屏
-  if (entries.length === 0 || exits.length === 0) {
-    return pool;
-  }
-
-  // 5. 组装链式代理矩阵
-  // Shadowrocket 要求：underlying-proxy 的值必须与列表中某个入口节点的 name 完全一致
-  const entryNodes = entries.map((e, idx) => ({
-    ...e.proxy,
-    name: `[入口${idx + 1}] ${e.tag}`
-  }));
-
-  const fastEntry = entryNodes.find(e => e.name.includes('香港高速')) || entryNodes[0];
-  const bgpEntry = entryNodes.find(e => e.name.includes('BGP')) || fastEntry;
-  const twEntry = entryNodes.find(e => e.name.includes('台湾'));
-  const proEntry = entryNodes.find(e => e.name.includes('深度优化'));
-
-  const usRes = exits.find(x => x.id === 'US-Residential');
-  const usNat = exits.find(x => x.id === 'US-Native');
-  const usPro = exits.find(x => x.id === 'US-Pro');
-  const sgAI = exits.find(x => x.id === 'SG-AI');
-  const dePro = exits.find(x => x.id === 'DE-Pro');
-  const frPro = exits.find(x => x.id === 'FR-Pro');
-
-  function makeChain(exitItem, entryNode, rank, label) {
-    if (!exitItem || !entryNode) return null;
+  function makeChain(exitNode, entryNode, rank, tag, scene) {
+    if (!exitNode || !entryNode) return null;
     return {
-      ...exitItem.proxy,
-      name: `🔗 ${rank} ${label} (${entryNode.name.split(' ')[1]}👉${exitItem.tag.split(' ')[1]})`,
-      'underlying-proxy': entryNode.name,
-      'dialer-proxy': entryNode.name
+      ...exitNode,
+      name: `🔗 ${rank} ${tag} (${entryNode.name.includes('BGP') ? '🇭🇰多线' : '🇭🇰港高'}➔${exitNode.name.includes('住宅') ? '🇺🇸美宅' : exitNode.name.includes('CN2') || exitNode.name.includes('US') ? '🇺🇸美高' : exitNode.name.includes('SG') ? '🇸🇬新高' : exitNode.name.includes('JP') ? '🇯🇵日专' : '🇩🇪德高'}) · ${scene}`,
+      'dialer-proxy': entryNode.name,
+      'underlying-proxy': entryNode.name
     };
   }
 
   const chains = [];
 
-  // 【链 01】顶级家宽住宅双跳（香港高速 👉 美国家宽真实住宅IP，解锁所有美区AI与内容）
-  if (fastEntry && usRes) {
-    chains.push(makeChain(usRes, fastEntry, '01', '顶级美国家宽双跳'));
+  // 【A 组：官方认证 · 防风控与 AI 专用双跳 (严苛防封 / 真实美国家宽)】
+  if (exitUSRes && defaultEntry) {
+    chains.push(makeChain(exitUSRes, defaultEntry, '01', '🛡️ 顶级美国家宽双跳', '防封控/OpenAI/Claude/银行'));
   }
-  // 【链 02】极速原生双跳（香港高速 👉 美国原生线路 728ms，极速低延迟AI对话）
-  if (fastEntry && usNat) {
-    chains.push(makeChain(usNat, fastEntry, '02', '极速美国原生双跳'));
-  }
-  // 【链 03】晚高峰抗拥堵双跳（香港多线BGP 👉 美国家宽真实住宅IP，0丢包抗晚高峰）
-  if (bgpEntry && usRes) {
-    chains.push(makeChain(usRes, bgpEntry, '03', '晚高峰BGP家宽双跳'));
-  }
-  // 【链 04】狮城原生AI双跳（香港高速 👉 新加坡原生AI与流媒体）
-  if (fastEntry && sgAI) {
-    chains.push(makeChain(sgAI, fastEntry, '04', '狮城原生AI双跳'));
-  }
-  // 【链 05】美区大带宽双跳（台湾商宽 👉 美国洛杉矶原生）
-  if (twEntry && usPro) {
-    chains.push(makeChain(usPro, twEntry, '05', '商宽美区双跳'));
-  } else if (fastEntry && usPro) {
-    chains.push(makeChain(usPro, fastEntry, '05', '经典美区双跳'));
-  }
-  // 【链 06】欧洲原生双跳（香港高速 👉 德国法兰克福深度优化）
-  if (fastEntry && (dePro || frPro)) {
-    chains.push(makeChain(dePro || frPro, fastEntry, '06', '欧洲原生双跳'));
+  if (exitUSRes && bgpEntry && bgpEntry !== defaultEntry) {
+    chains.push(makeChain(exitUSRes, bgpEntry, '02', '🛡️ 晚高峰抗拥家宽双跳', '晚高峰防封备用'));
   }
 
-  // 6. 直连极速加速组（供不想走中转或大文件快速下载使用）
-  const directPicks = [];
-  if (fastEntry) {
-    directPicks.push({
-      ...fastEntry,
-      name: `⚡ [极速直连] 🇭🇰 香港高速 (381ms/最快入口)`
+  // 【B 组：官方推荐 · 美区极速大带宽双跳 (机房千兆专线 / 4K秒开 / 测速首选)】
+  if (exitUSCN2 && defaultEntry) {
+    chains.push(makeChain(exitUSCN2, defaultEntry, '03', '⚡ 极速美区大带宽双跳', 'CN2-GIA最佳机房专线/4K秒开'));
+  }
+  if (exitUSCN2 && bgpEntry && bgpEntry !== defaultEntry) {
+    chains.push(makeChain(exitUSCN2, bgpEntry, '04', '⚡ 晚高峰美区大带宽双跳', '晚高峰抗拥堵/千兆大口子'));
+  }
+
+  // 【C 组：亚太与欧洲原生双跳 (低延迟 / 极速对话 / 原生内容解锁)】
+  if (exitSGAI && defaultEntry) {
+    chains.push(makeChain(exitSGAI, defaultEntry, '05', '🤖 狮城原生AI极速双跳', '亚太超低延迟/Gemini流式秒回'));
+  }
+  if (exitJPPro && defaultEntry) {
+    chains.push(makeChain(exitJPPro, defaultEntry, '06', '🎬 霓虹原生千兆双跳', '日本大阪机房专线/流媒体/游戏'));
+  }
+  if (exitDEHigh && defaultEntry) {
+    chains.push(makeChain(exitDEHigh, defaultEntry, '07', '🌍 欧洲法兰克福双跳', '德国深度优化机房专线'));
+  }
+
+  // 【D 组：日常直连极速加速组（单跳直通 · 官方推荐大带宽通道）】
+  const directSingles = [];
+  if (entryHKHigh) {
+    directSingles.push({
+      ...entryHKHigh,
+      name: '⚡ [直连极速] 🇭🇰 香港深度优化 (ACAS-HK · 测速/日常主用)'
     });
   }
-  if (twEntry) {
-    directPicks.push({
-      ...twEntry,
-      name: `⚡ [原生商宽] 🇹🇼 台湾动态商宽 (559ms/解锁Netflix)`
+  if (entryHKBGP) {
+    directSingles.push({
+      ...entryHKBGP,
+      name: '⚡ [直连极速] 🇭🇰 香港多线BGP (ACPS-HKBGP · 晚高峰专线)'
     });
   }
-  if (proEntry) {
-    directPicks.push({
-      ...proEntry,
-      name: `⚡ [深度优化] 🇭🇰 香港深度优化 (577ms/支持流媒体)`
+  if (exitUSCN2) {
+    directSingles.push({
+      ...exitUSCN2,
+      name: '⚡ [直连极速] 🇺🇸 美国CN2-GIA (ACAS-US · 美区极速大带宽)'
     });
   }
-  if (sgAI) {
-    directPicks.push({
-      ...sgAI.proxy,
-      name: `⚡ [原生AI] 🇸🇬 新加坡原生 (免中转/直接解锁Gemini)`
+  if (exitSGAI) {
+    directSingles.push({
+      ...exitSGAI,
+      name: '⚡ [直连极速] 🇸🇬 新加坡深度优化 (ACAS-SG · 原生AI免中转)'
+    });
+  }
+  if (exitJPPro) {
+    directSingles.push({
+      ...exitJPPro,
+      name: '⚡ [直连极速] 🇯🇵 日本大阪原生 (ACPS-JP · 千兆机房直达)'
     });
   }
 
-  // 7. 应急直连保底组（包含所有底层入口）
-  const fallbackNodes = entryNodes.map(e => ({
-    ...e,
-    name: `🛡️ 备用直连 | ${e.name.replace(/^\[入口\d\]\s*/, '')}`
-  }));
-
-  // 最终节点排序组合：
-  // 1. 核心精选双跳链（满足美区家宽、原生 AI 及欧洲落地）
-  // 2. 极速直连加速节点（免双跳，大带宽）
-  // 3. 入口底层实体节点（Shadowrocket underlying-proxy 必须显式存在）
-  // 4. 应急直连备用节点
+  // 最终组合返回：
+  // 1. 重构双跳核心链（防风控 + 大带宽 + 亚太AI）
+  // 2. 直连极速通道（供日常秒开与测速跑满本地带宽）
+  // 3. 底层入口节点（供客户端链式挂载）
   return [
     ...chains,
-    ...directPicks,
-    ...entryNodes,
-    ...fallbackNodes
+    ...directSingles,
+    ...entryNodes
   ];
 }
